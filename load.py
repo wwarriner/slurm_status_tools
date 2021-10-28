@@ -124,7 +124,11 @@ def snapshot_scontrol(self, source: str, *flags) -> str:
     """
     assert source in (NODE, JOB)
 
-    result = subprocess.run(args=["scontrol", "-o", "show", source, *flags])
+    result = subprocess.run(
+        args=["scontrol", "-o", "show", source, *flags],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+    )
     if result.returncode != 0:
         raise RuntimeError()
     else:
