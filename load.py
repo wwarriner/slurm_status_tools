@@ -48,15 +48,16 @@ class Snapshot:
         """
         Takes a snapshot of scontrol -o show *sources.
         """
-        out = {}
         process_count = self._process_count
         with mp.Pool(process_count) as pool:
+            results = {}
             for source in self.sources:
-                pool.apply_async(
-                    func=snapshot_scontrol,
-                    args=self._SOURCE_ARGS[source],
-                    callback=lambda x: self._assign(out, source, x),
+                results[source] = pool.apply_async(
+                    func=snapshot_scontrol, args=self._SOURCE_ARGS[source],
                 )
+            pool.close()
+            pool.join()
+        out = {k: r.get() for k, r in results.items()}
         self._data = out
 
     def has_test(self) -> bool:
