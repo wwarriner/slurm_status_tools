@@ -217,12 +217,12 @@ def summarize(snapshot: Snapshot) -> str:
         available_sum=available_sum,
         parse_value_fn=_parse_gpu_scontrol_job,
     )
+    v_gpu.extend(a_gpu)
 
     s = []
     s.append(summary_to_string(v_cpu, units="cores", dtype=int))
     s.append(summary_to_string(v_mem, units="TB", dtype=float))
     s.append(summary_to_string(v_gpu, units="gpus", dtype=int))
-    v_gpu.extend(a_gpu)
 
     out = "\n\n".join(s)
     return out
