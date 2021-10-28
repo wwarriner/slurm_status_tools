@@ -11,6 +11,8 @@ PathLike = Union[Path, PurePath, str]
 
 
 # TODO MemSpecLimit - how to communicate? how to account?
+# TODO running_jobs=$(squeue -h --state running | wc -l)
+# TODO pending_jobs=$(squeue -h --state pending | wc -l)
 
 
 NODE = "node"
