@@ -116,7 +116,7 @@ class Snapshot:
         data[source] = value
 
 
-def snapshot_scontrol(self, source: str, *flags) -> str:
+def snapshot_scontrol(source: str, *flags) -> str:
     """
     Takes a snapshot of the output of one call to `scontrol -o show *`. Returns values
     as a string. Source must be one of `job` or `node`. Additional flags such as `-d`
