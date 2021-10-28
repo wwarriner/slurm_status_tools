@@ -90,6 +90,7 @@ class Snapshot:
         """
         Writes a snapshot to test_folder.
         """
+        Path(self._test_folder).mkdir(parents=True, exist_ok=True)
         for source, data in self._data.items():
             filepath = self._build_test_path(source=source)
             with open(filepath, "w") as f:
