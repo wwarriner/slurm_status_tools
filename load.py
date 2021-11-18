@@ -1,11 +1,11 @@
 import argparse
 import multiprocessing as mp
-import re
-import subprocess
 from pathlib import Path, PurePath
 from typing import Any, Dict, List, Optional, Union
 
 import pandas as pd
+
+import parse
 
 PathLike = Union[Path, PurePath, str]
 
@@ -14,9 +14,6 @@ PathLike = Union[Path, PurePath, str]
 # TODO running_jobs=$(squeue -h --state running | wc -l)
 # TODO pending_jobs=$(squeue -h --state pending | wc -l)
 
-
-NODE = "node"
-JOB = "job"
 
 NAME = "name"
 MAGNITUDE = "magnitude"
@@ -29,181 +26,12 @@ AVAILABLE = "Available"
 IDLE = "Idle"
 ALLOCATED = "Allocated"
 
-TB_PER_MB = 1e-6
 
-GPU_SCONTROL_JOB_REGEX = re.compile(r"IDX:([0-9,-]+)")
-GPU_SCONTROL_NODE_REGEX = re.compile(r"gpu:.*?:([0-9]+)?")
+def summarize(snapshot: parse.Snapshot) -> str:
+    TB_PER_MB = 1e-6
 
-
-class Snapshot:
-    _SOURCE_ARGS = {NODE: ("node",), JOB: ("job", "-d")}
-
-    def __init__(self, test_folder: PurePath):
-        self._test_folder = test_folder
-        self._data = {}
-
-    @property
-    def sources(self) -> List[str]:
-        return [x for x in self._SOURCE_ARGS.keys()]
-
-    def take(self):
-        """
-        Takes a snapshot of scontrol -o show *sources.
-        """
-        process_count = self._process_count
-        with mp.Pool(process_count) as pool:
-            results = {}
-            for source in self.sources:
-                results[source] = pool.apply_async(
-                    func=snapshot_scontrol, args=self._SOURCE_ARGS[source],
-                )
-            pool.close()
-            pool.join()
-        out = {k: r.get() for k, r in results.items()}
-        self._data = out
-
-    def has_test(self) -> bool:
-        """
-        Checks whether a complete test case exists.
-        """
-        exists = []
-        for source in self.sources:
-            filepath = self._build_test_path(source=source)
-            exists.append(Path(filepath).is_file())
-        if len(exists) == 0:
-            return False
-        elif all(exists):
-            return True
-        else:
-            return False
-
-    def read_test(self):
-        """
-        Reads a snapshot from test_folder.
-        """
-        out = {}
-        for source in self.sources:
-            filepath = self._build_test_path(source=source)
-            with open(filepath, "w") as f:
-                data = f.read()
-            out[source] = data
-        self._data = out
-
-    def write_test(self):
-        """
-        Writes a snapshot to test_folder.
-        """
-        Path(self._test_folder).mkdir(parents=True, exist_ok=True)
-        for source, data in self._data.items():
-            filepath = self._build_test_path(source=source)
-            with open(filepath, "w") as f:
-                f.write(data)
-
-    def to_dataframes(self) -> Dict[str, pd.DataFrame]:
-        """
-        Converts to a dict of dataframes, one entry per source in self.sources.
-        """
-        dfs = {k: parse_scontrol(v.splitlines()) for k, v in self._data.items()}
-        return dfs
-
-    @property
-    def _process_count(self) -> int:
-        return len(self.sources)
-
-    def _build_test_path(self, source: str) -> PurePath:
-        filename = source + ".txt"
-        filepath = PurePath(self._test_folder) / filename
-        return filepath
-
-    @staticmethod
-    def _assign(data: Dict[str, str], source: str, value: str) -> None:
-        data[source] = value
-
-
-def snapshot_scontrol(source: str, *flags) -> str:
-    """
-    Takes a snapshot of the output of one call to `scontrol -o show *`. Returns values
-    as a string. Source must be one of `job` or `node`. Additional flags such as `-d`
-    may be supplied.
-    """
-    assert source in (NODE, JOB)
-
-    result = subprocess.run(
-        args=["scontrol", "-o", "show", source, *flags],
-        stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
-    )
-    if result.returncode != 0:
-        raise RuntimeError()
-    else:
-        return result.stdout.decode(encoding="utf-8")
-
-
-def parse_scontrol(lines: List[str]) -> pd.DataFrame:
-    """
-    Parses output of scontrol -o *. The command returns one record per line (node or
-    job). Each line has quasi-flag-style args that look like the following:
-    ```
-    a=foo b=bar c=hello world d=something=actual value
-    ```
-
-    The model is that each arg is composed of a field and a value as <field>=<value>.
-    Values have spaces, but the field-value pairs are space separated and values can
-    contain equals symbols, so we have to take care in parsing.
-
-    The approach to parsing this involves parsing in reverse order. We loop over the
-    contents of a line, popping them from the back end and putting them in both the
-    field and value. When we hit an equals character, we reset the field and change
-    state (equals_hit=True). When we hit a space while equals_hit=True, we assume we've
-    just finished collecting the actual field, so we turn the field and value into
-    strings, remove the field and leading `=` from the value string, and strip leading
-    and trailing whitespace. Then we add the results to a dict with field as key and
-    value as value. We reset state and continue parsing the line.
-
-    This method will not work for a value that has a space followed by an equals sign.
-    But then the problem becomes ill-posed because we can no longer distinguish when a
-    field-value pair ends, so we hope dearly that this never happens. If it does we'll
-    have to stop using the `-o` flag.
-    """
-    all_data = []
-    for line_s in lines:
-        line_data: Dict[str, str] = {}
-        line: List[str] = list(line_s)
-        field: List[str] = []
-        value: List[str] = []
-        equals_hit = False
-        while line:
-            c: str = line.pop()
-            field.append(c)
-            value.append(c)
-            if c == "=":
-                field = []
-                equals_hit = True
-            if c == " " and equals_hit:
-                field_s: str = "".join(field[::-1])
-                value_s: str = "".join(value[::-1])
-                value_s = value_s.replace(field_s, "", 1)
-                value_s = value_s.replace("=", "", 1)
-
-                field_s = field_s.strip()
-                value_s = value_s.strip()
-
-                line_data[field_s] = value_s
-
-                field = []
-                value = []
-                equals_hit = False
-
-        line_data.pop("", None)
-        all_data.append(line_data)
-
-    df = pd.DataFrame(all_data)
-    return df
-
-
-def summarize(snapshot: Snapshot) -> str:
     dfs = snapshot.to_dataframes()
-    df_node = dfs[NODE]
+    df_node = dfs[parse.NODE]
 
     v_cpu = summarize_total(df=df_node, total_col="CPUTot", alloc_col="CPUAlloc")
     v_mem = summarize_total(
@@ -213,17 +41,17 @@ def summarize(snapshot: Snapshot) -> str:
         magnitude_scale=TB_PER_MB,
     )
     v_gpu = summarize_total(
-        df=df_node, total_col="Gres", parse_value_fn=_parse_gpu_scontrol_node,
+        df=df_node, total_col="Gres", parse_value_fn=parse.parse_gpu_scontrol_node,
     )
     total_sum = _get_magnitude(summary=v_gpu, name=TOTAL)
     available_sum = _get_magnitude(summary=v_gpu, name=AVAILABLE)
-    df_job = dfs[JOB]
+    df_job = dfs[parse.JOB]
     a_gpu = summarize_allocated(
         df=df_job,
         alloc_col="GRES_IDX",
         total_sum=total_sum,
         available_sum=available_sum,
-        parse_value_fn=_parse_gpu_scontrol_job,
+        parse_value_fn=parse.parse_gpu_scontrol_job,
     )
     v_gpu.extend(a_gpu)
 
@@ -261,9 +89,9 @@ def summarize_total(
     all_values = df[total_col].apply(parse_value_fn)
     total_sum = all_values.astype(dtype=float).sum()
     assert isinstance(total_sum, float)
-    unavailable = _get_unavailable(df=df)
-    unavailable_sum = all_values[unavailable].astype(dtype=float).sum()
-    available_sum = total_sum - unavailable_sum
+    available = parse.available(df=df)
+    available_sum = all_values[available].astype(dtype=float).sum()
+    unavailable_sum = total_sum - available_sum
     assert isinstance(available_sum, float)
     values = [
         {NAME: "Total", MAGNITUDE: total_sum * magnitude_scale},
@@ -366,74 +194,6 @@ def summary_to_string(
     return "\n".join(out)
 
 
-def _get_unavailable(df: pd.DataFrame) -> pd.Series:
-    """
-    Nodes that have a reason are unavailable. If the column contains `na` then there is
-    NO reason, so they are available, so we negate.
-    """
-    return ~df["Reason"].isna()
-
-
-def _parse_csl(csl: str) -> List[int]:
-    """
-    Utility to parse comma-separated lists of integers that can contain hyphenated
-    ranges. Returns an explicit list of integers.
-
-    NOTE: We could save memory by turning this into a generator. It would work by
-    returning list values. When the list is empty we pop the next token. Tokens would be
-    single values or a range, with its trailing comma (if there is one). We almost
-    certainly won't need to do this.
-    """
-    if csl == "":
-        return []
-    values = []
-    ranges = csl.split(",")
-    for r in ranges:
-        try:
-            v = int(r)
-            values.append(v)
-        except:
-            extremes = [int(x) for x in r.split("-")]
-            max_v = max(extremes)
-            min_v = min(extremes)
-            v = list(range(min_v, max_v + 1))
-            values.extend(v)
-    return values
-
-
-def _parse_gpu_scontrol_node(gres_s: str) -> int:
-    """
-    Parses count of gpus from the `gres` field from `scontrol -o show node`. The form is
-    a comma separated list of `gpu:<name>:<count>`. Returns an integer.
-    """
-    gpus_total = 0
-    if "(null)" in gres_s:
-        return gpus_total
-    gres_l = gres_s.split(",")
-    for gres in gres_l:
-        matches = re.findall(pattern=GPU_SCONTROL_NODE_REGEX, string=gres)
-        values = [int(m) for m in matches]
-        gpus_total += sum(values)
-    return gpus_total
-
-
-def _parse_gpu_scontrol_job(gres_s: str) -> int:
-    """
-    Parses count of gpus from the `gres` field from `scontrol -o show job`. The form is
-    a comma separated list of `gpu(IDX:<csl of #>)`. Note the nested comma separated
-    list. Returns an integer.
-    """
-    gpus_total = 0
-    if not isinstance(gres_s, str):
-        return gpus_total
-    gres_l = gres_s.split(",")
-    for gres in gres_l:
-        matches = re.findall(pattern=GPU_SCONTROL_JOB_REGEX, string=gres)
-        values = [len(_parse_csl(m)) for m in matches]
-        gpus_total += sum(values)
-    return gpus_total
-
-
 def _get_magnitude(summary: List[Dict[str, Any]], name: str) -> Any:
     """
     Gets the named magnitude from a summary.
@@ -464,16 +224,7 @@ def interface() -> None:
     test = args.test
     generate_test_case = args.generate_test_case
 
-    snapshot = Snapshot(test_folder=PurePath("test"))
-    any_test = test or generate_test_case
-    if any_test:
-        if generate_test_case:
-            snapshot.take()
-            snapshot.write_test()
-        if test:
-            snapshot.read_test()
-    else:
-        snapshot.take()
+    snapshot = parse.snapshot_interface(generate_test=generate_test_case, run_test=test)
 
     out = summarize(snapshot=snapshot)
 
