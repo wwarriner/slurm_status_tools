@@ -2,8 +2,14 @@
 
 ## Load
 
-Returns neatly formatted tables of cpu, memory and gpu usage of SLURM.
+Returns neatly formatted tables of data from `scontrol`.
 
-To use the `load.py` function, simply use `python load.py`
+`python -u sstatus.py -c nodes > nodes.csv` - Individual node information.
 
-To test the `load.py` function use `python load.py --test`. To refresh the test case use `python load.py --generate-test-case`.
+`python -u sstatus.py -c nodes -s all > node_summary_all.csv` - Node summary across all partitions.
+
+`python -u sstatus.py -c nodes -s partitions > node_summary_by_partition.csv` - Node summary grouped by partition.
+
+`python -u sstatus.py -c load > load.csv` - Percent usage of various resources.
+
+`python -u sstatus.py -c partitions > partitions.csv` - Partition information.
