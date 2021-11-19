@@ -414,7 +414,24 @@ def _parse_nodelist(nodelist: str, sep: str = SEP, digit_count: int = 4) -> str:
     return n
 
 
-def duration_to_hhmm(duration: str) -> str:
+def duration_to_dh(duration: str) -> str:
+    d = DURATION_REGEX.match(duration)
+    if d is None:
+        out = "unknown duration"
+    else:
+        units = ("days", "hours", "minutes", "seconds")
+        values = [d.group(k) for k in units]
+        parts_of_td = {k: float(x) for k, x in zip(units, values) if x is not None}
+        td = dt.timedelta(**parts_of_td)
+
+        days = td.days
+        seconds = td.seconds
+        hours, _ = divmod(seconds, 3600)
+        out = f"{days:d} days, {hours:d} hours"
+    return out
+
+
+def duration_to_h(duration: str) -> str:
     d = DURATION_REGEX.match(duration)
     if d is None:
         out = "unknown duration"
@@ -428,8 +445,5 @@ def duration_to_hhmm(duration: str) -> str:
         seconds = td.seconds + days * 86400
         hours, _ = divmod(seconds, 3600)
         out = f"{hours:d}"
-        # hours, remainder = divmod(seconds, 3600)
-        # minutes, _ = divmod(remainder, 60)
-        # out = f"{hours:d}:{minutes:02d}"
 
     return out

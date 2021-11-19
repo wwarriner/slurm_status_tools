@@ -3,13 +3,57 @@ import multiprocessing as mp
 from pathlib import Path, PurePath
 from typing import Union
 
+import pandas as pd
+
 import commands
 import parse
+import styles
 
 PathLike = Union[Path, PurePath, str]
 
 
 def interface() -> None:
+    # TODO allow multiple commands to reuse the same snapshot?
+    # may need to allow output_file_name we suffix
+    # have to be a little opinionated about it
+    args = _get_args()
+    test = args.test
+    generate_test_case = args.generate_test_case
+    command = args.command[0]
+    summary = args.summary
+    if isinstance(summary, list):
+        summary = summary[0]
+    style = args.style[0]
+
+    snapshot = parse.snapshot_interface(generate_test=generate_test_case, run_test=test)
+    # TODO loop over many commands?
+    df = _build(command=command, summary=summary, snapshot=snapshot)
+    out = styles.apply_style(style=style, df=df)
+    print(out)
+
+
+def _build(command: str, summary: str, snapshot: parse.Snapshot) -> pd.DataFrame:
+    # TODO how to cut this spaghetti?
+    command = command.casefold()
+    if command in ("nodes", "load"):
+        nodes = commands.Nodes(snapshot=snapshot)
+        if summary is not None:
+            nodessummary = commands.NodesSummary(nodes=nodes, grouping=summary)
+            if command == "load":
+                out = commands.Load(nodessummary=nodessummary)
+            else:
+                out = nodessummary
+        else:
+            out = nodes
+    elif command == "partitions":
+        out = commands.Partitions(snapshot=snapshot)
+    else:
+        assert False
+
+    return out.to_df()
+
+
+def _get_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Tool for quickly checking node state on a SLURM cluster. Reports CPUs, Memory, GPUs (if under gres) and availability. Requires no arguments to run."
     )
@@ -18,15 +62,27 @@ def interface() -> None:
         "--command",
         nargs=1,
         type=str,
-        help="""One of ("nodes", "partitions", "load").""",
+        choices=("nodes", "load", "partitions"),
+        default=("load",),
+        help="""Command to run.""",
     )
     parser.add_argument(
         "-s",
         "--summary",
         nargs=1,
         type=str,
+        choices=commands.NodesSummary.GROUPINGS,
         default=None,
-        help="""Summarizes output of --command. Only available for ("nodes"). One of ("all", "partitions").""",
+        help="""Summarizes output of --command. Only available for `-c nodes`, ignored otherwise.""",
+    )
+    parser.add_argument(
+        "-f",
+        "--style",
+        nargs=1,
+        type=str,
+        choices=styles.STYLES,
+        default=(styles.CSV,),
+        help="""Formatting of output. `motd` is used for Open OnDemand Message of the Day.""",
     )
     parser.add_argument(
         "--test",
@@ -39,39 +95,7 @@ def interface() -> None:
         help="Generates a snapshot test-case and saves to disk in the ./test/ subfolder.",
     )
     args = parser.parse_args()
-
-    # TODO allow multiple commands to reuse the same snapshot
-    command = args.command[0]
-    summary = args.summary
-    if isinstance(summary, list):
-        summary = summary[0]
-    test = args.test
-    generate_test_case = args.generate_test_case
-
-    snapshot = parse.snapshot_interface(generate_test=generate_test_case, run_test=test)
-
-    # TODO loop over many commands
-    command = command.casefold()
-    if command in ("nodes", "load"):
-        nodes = commands.Nodes(snapshot=snapshot)
-        if command == "load":
-            nodessummary = commands.NodesSummary(nodes=nodes, style="all")
-            out = commands.Load(nodessummary=nodessummary)
-        elif summary is not None:
-            out = commands.NodesSummary(nodes=nodes, style=summary)
-        else:
-            out = nodes
-    elif command == "partitions":
-        out = commands.Partitions(snapshot=snapshot)
-    else:
-        assert False
-
-    # TODO parameterize output format:
-    # 1) csv
-    # 2) mediawiki
-    # 3) fixed_width motd
-    # 4) ood banner
-    print(out.to_df().to_csv(index=False))
+    return args
 
 
 if __name__ == "__main__":

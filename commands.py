@@ -1,6 +1,6 @@
 import itertools
 from pathlib import Path, PurePath
-from typing import Dict, Union
+from typing import Union
 
 import pandas as pd
 
@@ -52,12 +52,13 @@ GPU_COUNT_POOL = "_".join([GPU, COUNT, POOL])
 GPU_COUNT_ALLOCATED = "_".join([GPU, COUNT, ALLOCATED])
 GPU_COUNT_IDLE = "_".join([GPU, COUNT, IDLE])
 
-TIME_LIMIT_DHMS = "time_limit_dhms"
-TIME_LIMIT_H = "time_limit_h"
-PRIORITY_TIER = "priority_tier"
-NODES_AVAILABLE = "nodes_available"
-NODE_LIMIT_PER_USER = "node_limit_per_user"
-NODES = "nodes"
+NAME_T = "Name"
+TIME_LIMIT_DH = "Time Limit"
+TIME_LIMIT_H = "Time Limit (h)"
+PRIORITY_TIER = "Priority Tier"
+NODES_AVAILABLE = "Nodes"
+NODES_PER_USER = "Nodes Per User"
+NODE_LIST = "Node List"
 
 
 MB_TO_GB = 1.0 / 1024.0
@@ -70,13 +71,19 @@ class Partitions:
         dfs = snapshot.to_dataframes()
         df_partition = dfs[parse.PARTITION]
 
-        df_state[NAME] = df_partition[parse.PARTITION_NAME_P]
-        df_state[TIME_LIMIT_DHMS] = df_partition[parse.MAXTIME_P]
-        df_state[TIME_LIMIT_H] = df_state[TIME_LIMIT_DHMS].apply(parse.duration_to_hhmm)
-        df_state[PRIORITY_TIER] = df_partition[parse.PRIORITYTIER_P]
+        df_state[NAME_T] = df_partition[parse.PARTITION_NAME_P]
         df_state[NODES_AVAILABLE] = df_partition[parse.TOTALNODES_P]
-        df_state[NODE_LIMIT_PER_USER] = df_partition[parse.MAXNODES_P]
-        df_state[NODES] = df_partition[parse.NODES_P]
+        df_state[NODES_PER_USER] = df_partition[parse.MAXNODES_P]
+        df_state[TIME_LIMIT_DH] = df_partition[parse.MAXTIME_P].apply(
+            parse.duration_to_dh
+        )
+        df_state[PRIORITY_TIER] = df_partition[parse.PRIORITYTIER_P]
+        # df_state[TIME_LIMIT_H] = df_partition[parse.MAXTIME_P].apply(parse.duration_to_h)
+        # df_state[NODES] = df_partition[parse.NODES_P]
+
+        df_state[PRIORITY_TIER] = df_state[PRIORITY_TIER].astype(int)
+        df_state = df_state.sort_values(by=PRIORITY_TIER, ascending=False)
+        df_state[PRIORITY_TIER] = df_state[PRIORITY_TIER].astype(str)
 
         self._df = df_state
 
@@ -181,15 +188,20 @@ class Nodes:
 
 
 class NodesSummary:
-    ALL_STYLE = "all"
-    PARTITIONS_STYLE = "partitions"
+    ALL_GROUPING = "all"
+    PARTITIONS_GROUPING = "partitions"
+    GROUPINGS = (ALL_GROUPING, PARTITIONS_GROUPING)
 
-    def __init__(self, nodes: Nodes, style: str):
+    def __init__(self, nodes: Nodes, grouping: str):
         """
         """
         self._nodes = nodes
         df = nodes.to_df()
-        if style == self.PARTITIONS_STYLE:
+
+        empty_partition = df[PARTITIONS] == ""
+        df = df[~empty_partition]
+
+        if grouping == self.PARTITIONS_GROUPING:
             partitions = df.groupby(by=PARTITIONS)
             summarized_dfs = {}
             for label, partition_df in partitions:
@@ -197,8 +209,13 @@ class NodesSummary:
                     df=partition_df
                 )  # TODO error here, check what part looks like
                 summarized_dfs[label] = summarized_df
-            self._df = pd.concat(summarized_dfs.values(), keys=summarized_dfs.keys())
-        elif style == self.ALL_STYLE:
+            df_out = pd.concat(summarized_dfs.values(), keys=summarized_dfs.keys())
+            df_out = df_out.reset_index(drop=False)
+            df_out = df_out.drop("level_1", axis="columns")
+            df_out = df_out.rename(mapper={"level_0": PARTITIONS}, axis="columns")
+
+            self._df = df_out
+        elif grouping == self.ALL_GROUPING:
             self._df = self._summarize(df=df)
         else:
             assert False
@@ -230,11 +247,14 @@ class NodesSummary:
         df_total.loc[NODE_COUNT_TOTAL] = len(df_count)
 
         # available subset
-        df_agg = df_count.copy()
-        df_agg[NAME] = df[NAME]
-        df_agg[AVAILABLE] = df[AVAILABLE]
-        df_agg = df_agg.groupby(by=AVAILABLE)
-        df_agg = pd.DataFrame(df_agg.get_group(True))
+        df_agg_orig = df_count.copy()
+        df_agg_orig[NAME] = df[NAME]
+        df_agg_orig[AVAILABLE] = df[AVAILABLE]
+        df_agg = df_agg_orig.groupby(by=AVAILABLE)
+        if True not in df_agg.groups:
+            df_agg = df_agg_orig.iloc[:0, :].copy()
+        else:
+            df_agg = pd.DataFrame(df_agg.get_group(True))
 
         # sums of hardware
         count_cols = list(df_count.columns)
@@ -309,8 +329,13 @@ class Load:
         df = df.replace(to_replace="nan%", value="")
 
         df = df.drop(labels=[ALLOCATED, IDLE, POOL, UNAVAILABLE, TOTAL], axis="columns")
-        df = df.set_index(keys=RESOURCE)
-        df = df.transpose()
+        if PARTITIONS in df.columns:
+            index_keys = [PARTITIONS, RESOURCE]
+        else:
+            index_keys = [RESOURCE]
+        df = df.set_index(keys=index_keys)
+        df = df.stack()
+        df = df.unstack(level=1)
         df = df.reset_index(drop=False)
         df = df.rename(mapper={SUBSET: ""}, axis="columns")
 
