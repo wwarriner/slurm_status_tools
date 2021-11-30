@@ -28,8 +28,16 @@ def interface() -> None:
     snapshot = parse.snapshot_interface(generate_test=generate_test_case, run_test=test)
     # TODO loop over many commands?
     df = _build(command=command, summary=summary, snapshot=snapshot)
-    out = styles.apply_style(style=style, df=df)
-    print(out)
+    out = styles.apply_style(
+        style=style,
+        df=df,
+        user_alignments={
+            commands.PARTITION: styles.LEFT_ALIGN,
+            commands.NAME: styles.LEFT_ALIGN,
+        },
+        default_alignment=styles.RIGHT_ALIGN,
+    )
+    print(out, end="")
 
 
 def _build(command: str, summary: str, snapshot: parse.Snapshot) -> pd.DataFrame:
