@@ -427,7 +427,9 @@ def duration_to_dh(duration: str) -> str:
         days = td.days
         seconds = td.seconds
         hours, _ = divmod(seconds, 3600)
-        out = f"{days:d} days, {hours:d} hours"
+        out = f"{hours: >2d} hours"
+        if 0 < days:
+            out = f"{days: >d} days, " + out
     return out
 
 
