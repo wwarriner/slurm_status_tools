@@ -52,7 +52,7 @@ GPU_COUNT_POOL = "_".join([GPU, COUNT, POOL])
 GPU_COUNT_ALLOCATED = "_".join([GPU, COUNT, ALLOCATED])
 GPU_COUNT_IDLE = "_".join([GPU, COUNT, IDLE])
 
-NAME_T = "Name"
+PARTITION = "Partition"
 TIME_LIMIT_DH = "Time Limit"
 TIME_LIMIT_H = "Time Limit (h)"
 PRIORITY_TIER = "Priority Tier"
@@ -71,7 +71,7 @@ class Partitions:
         dfs = snapshot.to_dataframes()
         df_partition = dfs[parse.PARTITION]
 
-        df_state[NAME_T] = df_partition[parse.PARTITION_NAME_P]
+        df_state[PARTITION] = df_partition[parse.PARTITION_NAME_P]
         df_state[NODES_AVAILABLE] = df_partition[parse.TOTALNODES_P]
         df_state[NODES_PER_USER] = df_partition[parse.MAXNODES_P]
         df_state[TIME_LIMIT_DH] = df_partition[parse.MAXTIME_P].apply(
