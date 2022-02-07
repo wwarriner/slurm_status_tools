@@ -65,23 +65,19 @@ def snapshot_interface(
     return snapshot
 
 
-def snapshot_scontrol(source: str, *flags) -> str:
+def snapshot_command_output(command: str, flags: List[str]) -> str:
     """
-    Takes a snapshot of the output of one call to `scontrol -o show *`. Returns
-    values as a string. Source must be one of `job` or `node`. Additional flags
-    such as `-d` may be supplied.
+    Takes a snapshot of the output of a command call. Returns values as a
+    string. Command must be `scontrol` or `sacctmgr`. Additional subcommands
+    (e.g. `show`) and flags may be supplied using *flags
     """
-    assert source in (NODE, JOB, PARTITION)
+    assert command in (SACCTMGR, SCONTROL)
 
+    args = [command, *flags]
     result = subprocess.run(
-        args=["scontrol", "-o", "show", source, *flags],
-        stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
+        args=args, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
     )
-    if result.returncode != 0:
-        raise RuntimeError()
-    else:
-        return result.stdout.decode(encoding="utf-8")
+    return result.stdout.decode(encoding="utf-8")
 
 
 def parse_pipe_separated(lines: List[str], sep: str = SEP) -> pd.DataFrame:
