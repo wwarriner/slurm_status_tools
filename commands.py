@@ -59,6 +59,7 @@ PRIORITY_TIER = "Priority Tier"
 NODES_AVAILABLE = "Nodes"
 NODES_PER_USER = "Nodes Per User"
 NODE_LIST = "Node List"
+QOS = "QoS Limits"
 
 
 MB_TO_GB = 1.0 / 1024.0
