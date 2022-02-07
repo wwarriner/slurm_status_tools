@@ -25,3 +25,4 @@ python -u sstatus.py -c partitions -f ascii | tee out/partitions.txt
 python -u sstatus.py -c partitions -f mediawiki | tee out/partitions.mw
 python -u sstatus.py -c partitions -f motd | tee out/partitions.motd
 python -u sstatus.py -c partitions -f csv | tee out/partitions.csv
+python -u sstatus.py -c qos | tee out/qos.csv
