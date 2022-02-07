@@ -30,7 +30,9 @@ HARDWARE = "hardware"
 POOL = "pool"
 ALLOCATED = "allocated"
 IDLE = "idle"
+USED = "used"
 # STATES = (HARDWARE, POOL, ALLOCATED, IDLE)
+# STATES = (POOL, ALLOCATED, IDLE, USED)
 STATES = (POOL, ALLOCATED, IDLE)
 
 COUNT = "count"
