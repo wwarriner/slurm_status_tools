@@ -84,6 +84,16 @@ def snapshot_scontrol(source: str, *flags) -> str:
         return result.stdout.decode(encoding="utf-8")
 
 
+def parse_pipe_separated(lines: List[str], sep: str = SEP) -> pd.DataFrame:
+    """
+    Parses output of sacctmgr *.
+    """
+    string = "\n".join(lines)
+    df = pd.read_csv(StringIO(string), sep=sep)
+    df = _fillna_extended(df=df)
+    return df
+
+
 def parse_scontrol(lines: List[str], sep: str = SEP) -> pd.DataFrame:
     """
     Parses output of scontrol -o *. The command returns one record per line
