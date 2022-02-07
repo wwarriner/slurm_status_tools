@@ -66,11 +66,9 @@ MB_TO_GB = 1.0 / 1024.0
 
 class Partitions:
     def __init__(self, snapshot: parse.Snapshot):
+        df_partition = snapshot[parse.PARTITION]
+
         df_state = pd.DataFrame()
-
-        dfs = snapshot.to_dataframes()
-        df_partition = dfs[parse.PARTITION]
-
         df_state[PARTITION] = df_partition[parse.PARTITION_NAME_P]
         df_state[NODES_AVAILABLE] = df_partition[parse.TOTALNODES_P]
         df_state[NODES_PER_USER] = df_partition[parse.MAXNODES_P]
@@ -93,9 +91,8 @@ class Partitions:
 
 class Nodes:
     def __init__(self, snapshot: parse.Snapshot):
-        dfs = snapshot.to_dataframes()
-        df_job = dfs[parse.JOB]
-        df_node = dfs[parse.NODE]
+        df_job = snapshot[parse.JOB]
+        df_node = snapshot[parse.NODE]
         df_node = self._merge_gpu_job_info(df_job=df_job, df_node=df_node)
 
         df_state = pd.DataFrame()
