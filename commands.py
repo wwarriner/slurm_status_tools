@@ -128,6 +128,10 @@ class Nodes:
         return "_".join([resource, COUNT, state])
 
     @staticmethod
+    def _str_to_float(series: pd.Series) -> pd.Series:
+        return series.replace("", "0.0")
+
+    @staticmethod
     def _extract_series(df: pd.DataFrame, resource: str, state: str) -> pd.Series:
         # TODO can we make this table-driven instead of spaghetti?
         if resource == CORE:
