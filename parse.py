@@ -215,9 +215,6 @@ def parse_gpu_scontrol_job(gres_s: str) -> int:
     return gpus_total
 
 
-# def list_of_delim_to_dict
-
-
 def parse_delimited_gpu_scontrol_job(
     node_s: str, gres_s: str, sep: str = SEP
 ) -> Dict[str, int]:
