@@ -15,6 +15,8 @@ _allocated = Amount of resource currently allocated to jobs.
 _offline = Amount of resource offline.
 """
 
+# TODO join QoS field from `scontrol show partition`
+
 NAME = "name"
 AVAILABLE = "available"
 REASON = "reason"
