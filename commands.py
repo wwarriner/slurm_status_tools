@@ -64,6 +64,16 @@ NODE_LIST = "Node List"
 MB_TO_GB = 1.0 / 1024.0
 
 
+class QualityOfService:
+    def __init__(self, snapshot: parse.Snapshot):
+        df_qos = snapshot[parse.QOS]
+
+        self._df = df_qos
+
+    def to_df(self):
+        return self._df
+
+
 class Partitions:
     def __init__(self, snapshot: parse.Snapshot):
         df_partition = snapshot[parse.PARTITION]
