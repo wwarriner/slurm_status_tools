@@ -78,6 +78,7 @@ class Partitions:
         df_state[PRIORITY_TIER] = df_partition[parse.PRIORITYTIER_P]
         # df_state[TIME_LIMIT_H] = df_partition[parse.MAXTIME_P].apply(parse.duration_to_h)
         # df_state[NODES] = df_partition[parse.NODES_P]
+        df_state[QOS] = df_partition[parse.QOS_P]
 
         df_state[PRIORITY_TIER] = df_state[PRIORITY_TIER].astype(int)
         df_state = df_state.sort_values(by=PRIORITY_TIER, ascending=False)
