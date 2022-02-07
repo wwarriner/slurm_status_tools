@@ -170,7 +170,9 @@ class Nodes:
             elif state == IDLE:
                 out = pool - allocated
             elif state == USED:
-                out = pool - free
+                out = (
+                    pool - free
+                )  # TODO gives unexpected values, probably counts OS mem
             else:
                 assert False
         elif resource == GPU:
