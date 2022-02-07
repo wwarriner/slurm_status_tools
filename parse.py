@@ -1,16 +1,25 @@
 import datetime as dt
-import math
 import multiprocessing as mp
 import re
 import subprocess
+from io import StringIO
 from pathlib import Path, PurePath
 from typing import Dict, List, Optional
 
 import pandas as pd
 
+PARSER = "parser"
+ARGS = "args"
+COMMAND = "command"
+FLAGS = "flags"
+
+SACCTMGR = "sacctmgr"
+SCONTROL = "scontrol"
+SHOW = "show"
 NODE = "node"
 JOB = "job"
 PARTITION = "partition"
+QOS = "qos"
 
 GPU_SCONTROL_JOB_REGEX = re.compile(r"IDX:([0-9,-]+)")
 GPU_SCONTROL_NODE_REGEX = re.compile(r"gpu:.*?:([0-9]+)?")
@@ -19,9 +28,11 @@ NAME_N = "NodeName"
 REASON_N = "Reason"
 CPUTOT_N = "CPUTot"
 CPUALLOC_N = "CPUAlloc"
+CPULOAD_N = "CPULoad"
 REALMEMORY_MB_N = "RealMemory"
 MEMSPECLIMIT_MB_N = "MemSpecLimit"
 ALLOCMEM_MB_N = "AllocMem"
+FREEMEM_MB_N = "FreeMem"
 GRES_N = "Gres"
 PARTITIONS_N = "Partitions"
 
@@ -46,106 +57,9 @@ DURATION_REGEX = re.compile(DURATION_REGEX_STRING)
 SEP = "|"
 
 
-class Snapshot:
-    _SOURCE_ARGS = {NODE: ("node",), JOB: ("job", "-d"), PARTITION: ("partition",)}
-
-    def __init__(self, test_folder: Optional[PurePath] = None):
-        self._test_folder = test_folder
-        self._data = {}
-
-    @property
-    def sources(self) -> List[str]:
-        return [x for x in self._SOURCE_ARGS.keys()]
-
-    @property
-    def test_folder(self) -> Optional[PurePath]:
-        return self._test_folder
-
-    @test_folder.setter
-    def test_folder(self, value: PurePath) -> None:
-        self._test_folder = value
-
-    def take(self):
-        """
-        Takes a snapshot of scontrol -o show *sources.
-        """
-        process_count = self._process_count
-        with mp.Pool(process_count) as pool:
-            results = {}
-            for source in self.sources:
-                results[source] = pool.apply_async(
-                    func=snapshot_scontrol, args=self._SOURCE_ARGS[source],
-                )
-            pool.close()
-            pool.join()
-        out = {k: r.get() for k, r in results.items()}
-        self._data = out
-
-    def has_test(self) -> bool:
-        """
-        Checks whether a complete test case exists.
-        """
-        assert self._test_folder is not None
-        exists = []
-        for source in self.sources:
-            filepath = self._build_test_path(source=source)
-            exists.append(Path(filepath).is_file())
-        if len(exists) == 0:
-            return False
-        elif all(exists):
-            return True
-        else:
-            return False
-
-    def read_test(self):
-        """
-        Reads a snapshot from test_folder.
-        """
-        assert self._test_folder is not None
-        out = {}
-        for source in self.sources:
-            filepath = self._build_test_path(source=source)
-            with open(filepath, "r") as f:
-                data = f.read()
-            out[source] = data
-        self._data = out
-
-    def write_test(self):
-        """
-        Writes a snapshot to test_folder.
-        """
-        assert self._test_folder is not None
-        Path(self._test_folder).mkdir(parents=True, exist_ok=True)
-        for source, data in self._data.items():
-            filepath = self._build_test_path(source=source)
-            with open(filepath, "w") as f:
-                f.write(data)
-
-    def to_dataframes(self) -> Dict[str, pd.DataFrame]:
-        """
-        Converts to a dict of dataframes, one entry per source in self.sources.
-        """
-        dfs = {k: parse_scontrol(v.splitlines()) for k, v in self._data.items()}
-        return dfs
-
-    @property
-    def _process_count(self) -> int:
-        return len(self.sources)
-
-    def _build_test_path(self, source: str) -> PurePath:
-        assert self._test_folder is not None
-        filename = source + ".txt"
-        filepath = PurePath(self._test_folder) / filename
-        return filepath
-
-    @staticmethod
-    def _assign(data: Dict[str, str], source: str, value: str) -> None:
-        data[source] = value
-
-
 def snapshot_interface(
     generate_test: bool, run_test: bool, test_folder: Optional[PurePath] = None
-) -> Snapshot:
+) -> "Snapshot":
     snapshot = Snapshot()
     if run_test or generate_test:
         if test_folder is None:
@@ -162,23 +76,29 @@ def snapshot_interface(
     return snapshot
 
 
-def snapshot_scontrol(source: str, *flags) -> str:
+def snapshot_command_output(command: str, flags: List[str]) -> str:
     """
-    Takes a snapshot of the output of one call to `scontrol -o show *`. Returns
-    values as a string. Source must be one of `job` or `node`. Additional flags
-    such as `-d` may be supplied.
+    Takes a snapshot of the output of a command call. Returns values as a
+    string. Command must be `scontrol` or `sacctmgr`. Additional subcommands
+    (e.g. `show`) and flags may be supplied using *flags
     """
-    assert source in (NODE, JOB, PARTITION)
+    assert command in (SACCTMGR, SCONTROL)
 
+    args = [command, *flags]
     result = subprocess.run(
-        args=["scontrol", "-o", "show", source, *flags],
-        stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
+        args=args, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
     )
-    if result.returncode != 0:
-        raise RuntimeError()
-    else:
-        return result.stdout.decode(encoding="utf-8")
+    return result.stdout.decode(encoding="utf-8")
+
+
+def parse_pipe_separated(lines: List[str], sep: str = SEP) -> pd.DataFrame:
+    """
+    Parses output of sacctmgr *.
+    """
+    string = "\n".join(lines)
+    df = pd.read_csv(StringIO(string), sep=sep)
+    df = _fillna_extended(df=df)
+    return df
 
 
 def parse_scontrol(lines: List[str], sep: str = SEP) -> pd.DataFrame:
@@ -252,7 +172,7 @@ def parse_scontrol(lines: List[str], sep: str = SEP) -> pd.DataFrame:
         # TODO deal with the case where multiple nodes are requested. Will get multiple of some columns!
 
     df = pd.DataFrame(all_data)
-    df = df.fillna("")
+    df = _fillna_extended(df=df)
     return df
 
 
@@ -293,9 +213,6 @@ def parse_gpu_scontrol_job(gres_s: str) -> int:
         values = [len(_parse_csl(m)) for m in matches]
         gpus_total += sum(values)
     return gpus_total
-
-
-# def list_of_delim_to_dict
 
 
 def parse_delimited_gpu_scontrol_job(
@@ -449,3 +366,134 @@ def duration_to_h(duration: str) -> str:
         out = f"{hours:d}"
 
     return out
+
+
+def _fillna_extended(df: pd.DataFrame) -> pd.DataFrame:
+    df = df.fillna("")
+    df = df.replace("N/A", "")
+    df = df.replace("n/a", "")
+    return df
+
+
+class Snapshot:
+    _SOURCES = {
+        NODE: {
+            PARSER: parse_scontrol,
+            ARGS: {COMMAND: SCONTROL, FLAGS: ("-o", SHOW, NODE,)},
+        },
+        JOB: {
+            PARSER: parse_scontrol,
+            ARGS: {COMMAND: SCONTROL, FLAGS: ("-o", SHOW, JOB, "-d")},
+        },
+        PARTITION: {
+            PARSER: parse_scontrol,
+            ARGS: {COMMAND: SCONTROL, FLAGS: ("-o", SHOW, PARTITION,)},
+        },
+        QOS: {
+            PARSER: parse_pipe_separated,
+            ARGS: {COMMAND: SACCTMGR, FLAGS: (SHOW, QOS, "-P",)},
+        },
+    }
+
+    def __init__(self, test_folder: Optional[PurePath] = None):
+        self._test_folder = test_folder
+        self._data = None
+        self._dataframes = None
+
+    @property
+    def sources(self) -> List[str]:
+        return list(self._SOURCES.keys())
+
+    @property
+    def test_folder(self) -> Optional[PurePath]:
+        return self._test_folder
+
+    @test_folder.setter
+    def test_folder(self, value: PurePath) -> None:
+        self._test_folder = value
+
+    def __getitem__(self, source: str) -> pd.DataFrame:
+        if self._dataframes is None:
+            self._parse_dataframes()
+        assert self._dataframes is not None
+        return self._dataframes[source]
+
+    def take(self):
+        """
+        Takes a snapshot of scontrol -o show *sources.
+        """
+        process_count = self._process_count
+        with mp.Pool(process_count) as pool:
+            results = {}
+            for source in self.sources:
+                results[source] = pool.apply_async(
+                    func=snapshot_command_output, kwds=self._SOURCES[source][ARGS],
+                )
+            pool.close()
+            pool.join()
+        out = {k: r.get() for k, r in results.items()}
+        self._data = out
+
+    def has_test(self) -> bool:
+        """
+        Checks whether a complete test case exists.
+        """
+        assert self._test_folder is not None
+        exists = []
+        for source in self.sources:
+            filepath = self._build_test_path(source=source)
+            exists.append(Path(filepath).is_file())
+        if len(exists) == 0:
+            return False
+        elif all(exists):
+            return True
+        else:
+            return False
+
+    def read_test(self):
+        """
+        Reads a snapshot from test_folder.
+        """
+        assert self._test_folder is not None
+        out = {}
+        for source in self.sources:
+            filepath = self._build_test_path(source=source)
+            with open(filepath, "r") as f:
+                data = f.read()
+            out[source] = data
+        self._data = out
+
+    def write_test(self):
+        """
+        Writes a snapshot to test_folder.
+        """
+        assert self._data is not None
+        assert self._test_folder is not None
+        Path(self._test_folder).mkdir(parents=True, exist_ok=True)
+        for source, data in self._data.items():
+            filepath = self._build_test_path(source=source)
+            with open(filepath, "w") as f:
+                f.write(data)
+
+    def _parse_dataframes(self) -> None:
+        """
+        Converts to a dict of dataframes, one entry per source in self.sources.
+        """
+        assert self._data is not None
+        self._dataframes = {
+            k: self._SOURCES[k][PARSER](v.splitlines()) for k, v in self._data.items()
+        }
+
+    @property
+    def _process_count(self) -> int:
+        return len(self.sources)
+
+    def _build_test_path(self, source: str) -> PurePath:
+        assert self._test_folder is not None
+        filename = source + ".txt"
+        filepath = PurePath(self._test_folder) / filename
+        return filepath
+
+    @staticmethod
+    def _assign(data: Dict[str, str], source: str, value: str) -> None:
+        data[source] = value

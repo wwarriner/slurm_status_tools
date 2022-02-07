@@ -55,6 +55,8 @@ def _build(command: str, summary: str, snapshot: parse.Snapshot) -> pd.DataFrame
             out = nodes
     elif command == "partitions":
         out = commands.Partitions(snapshot=snapshot)
+    elif command == "qos":
+        out = commands.QualityOfService(snapshot=snapshot)
     else:
         assert False
 
@@ -70,7 +72,7 @@ def _get_args() -> argparse.Namespace:
         "--command",
         nargs=1,
         type=str,
-        choices=("nodes", "load", "partitions"),
+        choices=("nodes", "load", "partitions", "qos"),
         default=("load",),
         help="""Command to run.""",
     )

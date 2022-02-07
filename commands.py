@@ -15,6 +15,8 @@ _allocated = Amount of resource currently allocated to jobs.
 _offline = Amount of resource offline.
 """
 
+# TODO join QoS field from `scontrol show partition`
+
 NAME = "name"
 AVAILABLE = "available"
 REASON = "reason"
@@ -30,7 +32,9 @@ HARDWARE = "hardware"
 POOL = "pool"
 ALLOCATED = "allocated"
 IDLE = "idle"
+USED = "used"
 # STATES = (HARDWARE, POOL, ALLOCATED, IDLE)
+# STATES = (POOL, ALLOCATED, IDLE, USED)
 STATES = (POOL, ALLOCATED, IDLE)
 
 COUNT = "count"
@@ -59,18 +63,27 @@ PRIORITY_TIER = "Priority Tier"
 NODES_AVAILABLE = "Nodes"
 NODES_PER_USER = "Nodes Per User"
 NODE_LIST = "Node List"
+QOS = "QoS Limits"
 
 
 MB_TO_GB = 1.0 / 1024.0
 
 
+class QualityOfService:
+    def __init__(self, snapshot: parse.Snapshot):
+        df_qos = snapshot[parse.QOS]
+
+        self._df = df_qos
+
+    def to_df(self):
+        return self._df
+
+
 class Partitions:
     def __init__(self, snapshot: parse.Snapshot):
+        df_partition = snapshot[parse.PARTITION]
+
         df_state = pd.DataFrame()
-
-        dfs = snapshot.to_dataframes()
-        df_partition = dfs[parse.PARTITION]
-
         df_state[PARTITION] = df_partition[parse.PARTITION_NAME_P]
         df_state[NODES_AVAILABLE] = df_partition[parse.TOTALNODES_P]
         df_state[NODES_PER_USER] = df_partition[parse.MAXNODES_P]
@@ -80,6 +93,7 @@ class Partitions:
         df_state[PRIORITY_TIER] = df_partition[parse.PRIORITYTIER_P]
         # df_state[TIME_LIMIT_H] = df_partition[parse.MAXTIME_P].apply(parse.duration_to_h)
         # df_state[NODES] = df_partition[parse.NODES_P]
+        df_state[QOS] = df_partition[parse.QOS_P]
 
         df_state[PRIORITY_TIER] = df_state[PRIORITY_TIER].astype(int)
         df_state = df_state.sort_values(by=PRIORITY_TIER, ascending=False)
@@ -93,9 +107,8 @@ class Partitions:
 
 class Nodes:
     def __init__(self, snapshot: parse.Snapshot):
-        dfs = snapshot.to_dataframes()
-        df_job = dfs[parse.JOB]
-        df_node = dfs[parse.NODE]
+        df_job = snapshot[parse.JOB]
+        df_node = snapshot[parse.NODE]
         df_node = self._merge_gpu_job_info(df_job=df_job, df_node=df_node)
 
         df_state = pd.DataFrame()
@@ -120,31 +133,46 @@ class Nodes:
         return "_".join([resource, COUNT, state])
 
     @staticmethod
+    def _str_to_float(series: pd.Series) -> pd.Series:
+        return series.replace("", "0.0")
+
+    @staticmethod
     def _extract_series(df: pd.DataFrame, resource: str, state: str) -> pd.Series:
         # TODO can we make this table-driven instead of spaghetti?
         if resource == CORE:
             hardware = df[parse.CPUTOT_N].astype(int)
             allocated = df[parse.CPUALLOC_N].astype(int)
+            used = Nodes._str_to_float(series=df[parse.CPULOAD_N]).astype(float)
             if state in (HARDWARE, POOL):
                 out = hardware
             elif state == ALLOCATED:
                 out = allocated
             elif state == IDLE:
                 out = hardware - allocated
+            elif state == USED:
+                out = used
             else:
                 assert False
         elif resource == MEMORY_GB:
             hardware = Nodes._normalize_mem(df[parse.REALMEMORY_MB_N])
             reserved = Nodes._normalize_mem(df[parse.MEMSPECLIMIT_MB_N])
             allocated = Nodes._normalize_mem(df[parse.ALLOCMEM_MB_N])
+            free = Nodes._normalize_mem(df[parse.FREEMEM_MB_N])
+
+            pool = hardware - reserved
+
             if state == HARDWARE:
                 out = hardware
             elif state == POOL:
-                out = hardware - reserved
+                out = pool
             elif state == ALLOCATED:
                 out = allocated
             elif state == IDLE:
-                out = hardware - reserved - allocated
+                out = pool - allocated
+            elif state == USED:
+                out = (
+                    pool - free
+                )  # TODO gives unexpected values, probably counts OS mem
             else:
                 assert False
         elif resource == GPU:
@@ -156,6 +184,8 @@ class Nodes:
                 out = allocated
             elif state == IDLE:
                 out = hardware - allocated
+            elif state == USED:
+                out = allocated  # TODO see if we can do better
             else:
                 assert False
         else:
@@ -181,7 +211,7 @@ class Nodes:
 
     @staticmethod
     def _normalize_mem(s_mb: pd.Series) -> pd.Series:
-        s_mb = s_mb.replace("", "0.0")
+        s_mb = Nodes._str_to_float(series=s_mb)
         s_mb = s_mb.astype(float)
         s_out = s_mb * MB_TO_GB
         return s_out
@@ -349,6 +379,3 @@ class Load:
         f = n / d
         out = f.apply(func=lambda x: "{:.1%}".format(x))
         return out
-
-
-# TODO add formatted partition table for OOD and Shell MOTD banner
