@@ -137,26 +137,35 @@ class Nodes:
         if resource == CORE:
             hardware = df[parse.CPUTOT_N].astype(int)
             allocated = df[parse.CPUALLOC_N].astype(int)
+            used = Nodes._str_to_float(series=df[parse.CPULOAD_N]).astype(float)
             if state in (HARDWARE, POOL):
                 out = hardware
             elif state == ALLOCATED:
                 out = allocated
             elif state == IDLE:
                 out = hardware - allocated
+            elif state == USED:
+                out = used
             else:
                 assert False
         elif resource == MEMORY_GB:
             hardware = Nodes._normalize_mem(df[parse.REALMEMORY_MB_N])
             reserved = Nodes._normalize_mem(df[parse.MEMSPECLIMIT_MB_N])
             allocated = Nodes._normalize_mem(df[parse.ALLOCMEM_MB_N])
+            free = Nodes._normalize_mem(df[parse.FREEMEM_MB_N])
+
+            pool = hardware - reserved
+
             if state == HARDWARE:
                 out = hardware
             elif state == POOL:
-                out = hardware - reserved
+                out = pool
             elif state == ALLOCATED:
                 out = allocated
             elif state == IDLE:
-                out = hardware - reserved - allocated
+                out = pool - allocated
+            elif state == USED:
+                out = pool - free
             else:
                 assert False
         elif resource == GPU:
@@ -168,6 +177,8 @@ class Nodes:
                 out = allocated
             elif state == IDLE:
                 out = hardware - allocated
+            elif state == USED:
+                out = allocated  # TODO see if we can do better
             else:
                 assert False
         else:
