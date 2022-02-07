@@ -204,7 +204,7 @@ class Nodes:
 
     @staticmethod
     def _normalize_mem(s_mb: pd.Series) -> pd.Series:
-        s_mb = s_mb.replace("", "0.0")
+        s_mb = Nodes._str_to_float(series=s_mb)
         s_mb = s_mb.astype(float)
         s_out = s_mb * MB_TO_GB
         return s_out
