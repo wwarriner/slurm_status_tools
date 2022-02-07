@@ -377,6 +377,3 @@ class Load:
         f = n / d
         out = f.apply(func=lambda x: "{:.1%}".format(x))
         return out
-
-
-# TODO add formatted partition table for OOD and Shell MOTD banner
