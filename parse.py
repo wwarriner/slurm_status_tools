@@ -172,7 +172,7 @@ def parse_scontrol(lines: List[str], sep: str = SEP) -> pd.DataFrame:
         # TODO deal with the case where multiple nodes are requested. Will get multiple of some columns!
 
     df = pd.DataFrame(all_data)
-    df = df.fillna("")
+    df = _fillna_extended(df=df)
     return df
 
 
