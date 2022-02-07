@@ -8,9 +8,18 @@ from typing import Dict, List, Optional
 
 import pandas as pd
 
+PARSER = "parser"
+ARGS = "args"
+COMMAND = "command"
+FLAGS = "flags"
+
+SACCTMGR = "sacctmgr"
+SCONTROL = "scontrol"
+SHOW = "show"
 NODE = "node"
 JOB = "job"
 PARTITION = "partition"
+QOS = "qos"
 
 GPU_SCONTROL_JOB_REGEX = re.compile(r"IDX:([0-9,-]+)")
 GPU_SCONTROL_NODE_REGEX = re.compile(r"gpu:.*?:([0-9]+)?")
@@ -19,9 +28,11 @@ NAME_N = "NodeName"
 REASON_N = "Reason"
 CPUTOT_N = "CPUTot"
 CPUALLOC_N = "CPUAlloc"
+CPULOAD_N = "CPULoad"
 REALMEMORY_MB_N = "RealMemory"
 MEMSPECLIMIT_MB_N = "MemSpecLimit"
 ALLOCMEM_MB_N = "AllocMem"
+FREEMEM_MB_N = "FreeMem"
 GRES_N = "Gres"
 PARTITIONS_N = "Partitions"
 
