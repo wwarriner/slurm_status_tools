@@ -280,6 +280,43 @@ def available(df: pd.DataFrame) -> pd.Series:
     return out
 
 
+def duration_to_dh(duration: str) -> str:
+    d = DURATION_REGEX.match(duration)
+    if d is None:
+        out = "unknown duration"
+    else:
+        units = ("days", "hours", "minutes", "seconds")
+        values = [d.group(k) for k in units]
+        parts_of_td = {k: float(x) for k, x in zip(units, values) if x is not None}
+        td = dt.timedelta(**parts_of_td)
+
+        days = td.days
+        seconds = td.seconds
+        hours, _ = divmod(seconds, 3600)
+        out = f"{hours: >2d} hours"
+        if 0 < days:
+            out = f"{days: >d} days, " + out
+    return out
+
+
+def duration_to_h(duration: str) -> str:
+    d = DURATION_REGEX.match(duration)
+    if d is None:
+        out = "unknown duration"
+    else:
+        units = ("days", "hours", "minutes", "seconds")
+        values = [d.group(k) for k in units]
+        parts_of_td = {k: float(x) for k, x in zip(units, values) if x is not None}
+        td = dt.timedelta(**parts_of_td)
+
+        days = td.days
+        seconds = td.seconds + days * 86400
+        hours, _ = divmod(seconds, 3600)
+        out = f"{hours:d}"
+
+    return out
+
+
 # def get_unique_from_delimited(v: List[str], sep=",") -> List[str]:
 #     """
 #     Input is a list of delimited strings. Output is a list of all unique strings
@@ -329,43 +366,6 @@ def _parse_nodelist(nodelist: str, sep: str = SEP, digit_count: int = 4) -> str:
     ns = ["c" + f.format(x) for x in ni]
     n = sep.join(ns)
     return n
-
-
-def duration_to_dh(duration: str) -> str:
-    d = DURATION_REGEX.match(duration)
-    if d is None:
-        out = "unknown duration"
-    else:
-        units = ("days", "hours", "minutes", "seconds")
-        values = [d.group(k) for k in units]
-        parts_of_td = {k: float(x) for k, x in zip(units, values) if x is not None}
-        td = dt.timedelta(**parts_of_td)
-
-        days = td.days
-        seconds = td.seconds
-        hours, _ = divmod(seconds, 3600)
-        out = f"{hours: >2d} hours"
-        if 0 < days:
-            out = f"{days: >d} days, " + out
-    return out
-
-
-def duration_to_h(duration: str) -> str:
-    d = DURATION_REGEX.match(duration)
-    if d is None:
-        out = "unknown duration"
-    else:
-        units = ("days", "hours", "minutes", "seconds")
-        values = [d.group(k) for k in units]
-        parts_of_td = {k: float(x) for k, x in zip(units, values) if x is not None}
-        td = dt.timedelta(**parts_of_td)
-
-        days = td.days
-        seconds = td.seconds + days * 86400
-        hours, _ = divmod(seconds, 3600)
-        out = f"{hours:d}"
-
-    return out
 
 
 def _fillna_extended(df: pd.DataFrame) -> pd.DataFrame:
