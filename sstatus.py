@@ -54,6 +54,7 @@ def _build(command: str, summary: str, snapshot: parse.Snapshot) -> pd.DataFrame
         else:
             out = nodes.to_df()
     elif command == "partitions":
+        # TODO hide this inside Partitions
         qos = commands.QualityOfService(snapshot=snapshot)
         qos = qos.to_df()
         partitions = commands.Partitions(snapshot=snapshot)
