@@ -2,6 +2,7 @@ import itertools
 from pathlib import Path, PurePath
 from typing import Union
 
+import numpy as np
 import pandas as pd
 
 import parse
@@ -120,6 +121,12 @@ class Partitions:
         df_state[PRIORITY_TIER] = df_state[PRIORITY_TIER].astype(str)
 
         self._df = df_state
+
+    def merge_qos(self, qos: QualityOfService) -> None:
+        qos_df = qos.to_df()
+        merged_df = self._df.merge(qos_df, how="left", left_on=QOS, right_on=QOS)
+        merged_df = merged_df.drop(QOS, axis="columns")
+        self._df = merged_df
 
     def to_df(self) -> pd.DataFrame:
         return self._df
