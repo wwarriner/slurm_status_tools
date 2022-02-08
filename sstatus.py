@@ -54,7 +54,14 @@ def _build(command: str, summary: str, snapshot: parse.Snapshot) -> pd.DataFrame
         else:
             out = nodes.to_df()
     elif command == "partitions":
-        out = commands.Partitions(snapshot=snapshot).to_df()
+        qos = commands.QualityOfService(snapshot=snapshot)
+        qos = qos.to_df()
+        partitions = commands.Partitions(snapshot=snapshot)
+        partitions = partitions.to_df()
+        out = partitions.merge(
+            qos, how="left", left_on=commands.QOS, right_on=commands.QOS
+        )
+        out = out.drop(commands.QOS, axis="columns")
     elif command == "qos":
         out = commands.QualityOfService(snapshot=snapshot).to_df()
     else:
