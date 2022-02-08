@@ -48,19 +48,19 @@ def _build(command: str, summary: str, snapshot: parse.Snapshot) -> pd.DataFrame
         if summary is not None:
             nodessummary = commands.NodesSummary(nodes=nodes, grouping=summary)
             if command == "load":
-                out = commands.Load(nodessummary=nodessummary)
+                out = commands.Load(nodessummary=nodessummary).to_df()
             else:
-                out = nodessummary
+                out = nodessummary.to_df()
         else:
-            out = nodes
+            out = nodes.to_df()
     elif command == "partitions":
-        out = commands.Partitions(snapshot=snapshot)
+        out = commands.Partitions(snapshot=snapshot).to_df()
     elif command == "qos":
-        out = commands.QualityOfService(snapshot=snapshot)
+        out = commands.QualityOfService(snapshot=snapshot).to_df()
     else:
         assert False
 
-    return out.to_df()
+    return out
 
 
 def _get_args() -> argparse.Namespace:
