@@ -280,6 +280,97 @@ def available(df: pd.DataFrame) -> pd.Series:
     return out
 
 
+def duration_to_dh(duration: str) -> str:
+    d = DURATION_REGEX.match(duration)
+    if d is None:
+        out = "unknown duration"
+    else:
+        units = ("days", "hours", "minutes", "seconds")
+        values = [d.group(k) for k in units]
+        parts_of_td = {k: float(x) for k, x in zip(units, values) if x is not None}
+        td = dt.timedelta(**parts_of_td)
+
+        days = td.days
+        seconds = td.seconds
+        hours, _ = divmod(seconds, 3600)
+        out = f"{hours: >2d} hours"
+        if 0 < days:
+            out = f"{days: >d} days, " + out
+    return out
+
+
+def duration_to_h(duration: str) -> str:
+    d = DURATION_REGEX.match(duration)
+    if d is None:
+        out = "unknown duration"
+    else:
+        units = ("days", "hours", "minutes", "seconds")
+        values = [d.group(k) for k in units]
+        parts_of_td = {k: float(x) for k, x in zip(units, values) if x is not None}
+        td = dt.timedelta(**parts_of_td)
+
+        days = td.days
+        seconds = td.seconds + days * 86400
+        hours, _ = divmod(seconds, 3600)
+        out = f"{hours:d}"
+
+    return out
+
+
+def parse_key_value_csl(
+    csl: str, item_sep: str = ",", key_value_sep: str = "="
+) -> dict:
+    """
+    Parses a list of the form "cpu=10,mem=20T" into a dict like {"cpu": 10,
+    "mem": "20T"}. Only the value associated with the first instance of a key is
+    kept. Will attempt to convert numeric values.
+    """
+    if csl == "":
+        return {}
+    values = {}
+    items = csl.split(item_sep)
+    for item in items:
+        try:
+            parts = item.split(key_value_sep)
+            key = parts[0]
+            value = parts[1]
+        except:
+            continue
+
+        if key in values:
+            continue
+
+        try:
+            value = int(value)
+        except:
+            pass
+
+        try:
+            value = float(value)
+        except:
+            pass
+
+        values[key] = value
+
+    return values
+
+
+def parse_memory_value_to_gb(value: str) -> float:
+    try:
+        amount = float(value[:-1])
+        unit = value[-1].casefold()
+        MULTIPLIERS = {
+            "k": 1024.0 ** -2,
+            "m": 1024.0 ** -1,
+            "g": 1.0,
+            "t": 1024.0,
+        }
+        amount *= MULTIPLIERS[unit]
+    except:
+        amount = float("nan")
+    return amount
+
+
 # def get_unique_from_delimited(v: List[str], sep=",") -> List[str]:
 #     """
 #     Input is a list of delimited strings. Output is a list of all unique strings
@@ -329,43 +420,6 @@ def _parse_nodelist(nodelist: str, sep: str = SEP, digit_count: int = 4) -> str:
     ns = ["c" + f.format(x) for x in ni]
     n = sep.join(ns)
     return n
-
-
-def duration_to_dh(duration: str) -> str:
-    d = DURATION_REGEX.match(duration)
-    if d is None:
-        out = "unknown duration"
-    else:
-        units = ("days", "hours", "minutes", "seconds")
-        values = [d.group(k) for k in units]
-        parts_of_td = {k: float(x) for k, x in zip(units, values) if x is not None}
-        td = dt.timedelta(**parts_of_td)
-
-        days = td.days
-        seconds = td.seconds
-        hours, _ = divmod(seconds, 3600)
-        out = f"{hours: >2d} hours"
-        if 0 < days:
-            out = f"{days: >d} days, " + out
-    return out
-
-
-def duration_to_h(duration: str) -> str:
-    d = DURATION_REGEX.match(duration)
-    if d is None:
-        out = "unknown duration"
-    else:
-        units = ("days", "hours", "minutes", "seconds")
-        values = [d.group(k) for k in units]
-        parts_of_td = {k: float(x) for k, x in zip(units, values) if x is not None}
-        td = dt.timedelta(**parts_of_td)
-
-        days = td.days
-        seconds = td.seconds + days * 86400
-        hours, _ = divmod(seconds, 3600)
-        out = f"{hours:d}"
-
-    return out
 
 
 def _fillna_extended(df: pd.DataFrame) -> pd.DataFrame:
