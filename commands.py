@@ -22,6 +22,8 @@ AVAILABLE = "available"
 REASON = "reason"
 PARTITIONS = "partitions"
 
+MAX_TRES_PER_USER = "MaxTRESPU"
+
 CORE = "core"
 MEMORY_GB = "memory_gb"
 GPU = "gpu"
@@ -64,6 +66,8 @@ NODES_AVAILABLE = "Nodes"
 NODES_PER_USER = "Nodes Per User"
 NODE_LIST = "Node List"
 QOS = "QoS Limits"
+MEMORY_GB_QOS = "Memory (GB) Quota"
+CORE_QOS = "Core Count Quota"
 
 
 MB_TO_GB = 1.0 / 1024.0
@@ -72,8 +76,24 @@ MB_TO_GB = 1.0 / 1024.0
 class QualityOfService:
     def __init__(self, snapshot: parse.Snapshot):
         df_qos = snapshot[parse.QOS]
+        tres_records = df_qos[MAX_TRES_PER_USER].apply(
+            lambda x: parse.parse_key_value_csl(x)
+        )
 
-        self._df = df_qos
+        df_state = pd.DataFrame.from_records(data=tres_records)
+        df_state["mem"] = df_state["mem"].apply(parse.parse_memory_value_to_gb)
+        df_state = pd.concat([df_qos["Name"], df_state], axis="columns")
+        df_state = df_state.rename(
+            columns={"Name": QOS, "cpu": CORE_QOS, "mem": MEMORY_GB_QOS}
+        )
+        df_state[MEMORY_GB_QOS] = (
+            df_state[MEMORY_GB_QOS].replace(np.nan, 0.0).astype(int).replace(0, "")
+        )
+        df_state[CORE_QOS] = (
+            df_state[CORE_QOS].replace(np.nan, 0.0).astype(int).replace(0, "")
+        )
+
+        self._df = df_state
 
     def to_df(self):
         return self._df
