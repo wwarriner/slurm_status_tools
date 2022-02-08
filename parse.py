@@ -317,6 +317,60 @@ def duration_to_h(duration: str) -> str:
     return out
 
 
+def parse_key_value_csl(
+    csl: str, item_sep: str = ",", key_value_sep: str = "="
+) -> dict:
+    """
+    Parses a list of the form "cpu=10,mem=20T" into a dict like {"cpu": 10,
+    "mem": "20T"}. Only the value associated with the first instance of a key is
+    kept. Will attempt to convert numeric values.
+    """
+    if csl == "":
+        return {}
+    values = {}
+    items = csl.split(item_sep)
+    for item in items:
+        try:
+            parts = item.split(key_value_sep)
+            key = parts[0]
+            value = parts[1]
+        except:
+            continue
+
+        if key in values:
+            continue
+
+        try:
+            value = int(value)
+        except:
+            pass
+
+        try:
+            value = float(value)
+        except:
+            pass
+
+        values[key] = value
+
+    return values
+
+
+def parse_memory_value_to_gb(value: str) -> float:
+    try:
+        amount = float(value[:-1])
+        unit = value[-1].casefold()
+        MULTIPLIERS = {
+            "k": 1024.0 ** -2,
+            "m": 1024.0 ** -1,
+            "g": 1.0,
+            "t": 1024.0,
+        }
+        amount *= MULTIPLIERS[unit]
+    except:
+        amount = float("nan")
+    return amount
+
+
 # def get_unique_from_delimited(v: List[str], sep=",") -> List[str]:
 #     """
 #     Input is a list of delimited strings. Output is a list of all unique strings
