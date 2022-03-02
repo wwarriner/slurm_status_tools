@@ -64,7 +64,7 @@ TIME_LIMIT_DH = "Time Limit"
 TIME_LIMIT_H = "Time Limit (h)"
 PRIORITY_TIER = "Priority Tier"
 NODES_AVAILABLE = "Nodes"
-NODES_PER_USER = "Nodes Per User"
+NODES_PER_RESEARCHER = "Nodes Per Researcher"
 NODE_LIST = "Node List"
 QOS = "QoS Limits"
 MEMORY_GB_QOS = "Memory (GB) Quota"
@@ -107,7 +107,7 @@ class Partitions:
         df_state = pd.DataFrame()
         df_state[PARTITION] = df_partition[parse.PARTITION_NAME_P]
         df_state[NODES_AVAILABLE] = df_partition[parse.TOTALNODES_P]
-        df_state[NODES_PER_USER] = df_partition[parse.MAXNODES_P]
+        df_state[NODES_PER_RESEARCHER] = df_partition[parse.MAXNODES_P]
         df_state[TIME_LIMIT_DH] = df_partition[parse.MAXTIME_P].apply(
             parse.duration_to_dh
         )
