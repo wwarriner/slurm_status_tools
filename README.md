@@ -1,6 +1,6 @@
 # Slurm Status Tools
 
-## Load
+## Usage
 
 Returns neatly formatted tables of data from `scontrol`.
 
@@ -13,3 +13,11 @@ Returns neatly formatted tables of data from `scontrol`.
 `python -u sstatus.py -c load > load.csv` - Percent usage of various resources.
 
 `python -u sstatus.py -c partitions > partitions.csv` - Partition information.
+
+## Output Formats
+
+- CSV
+- Markdown
+- ASCII
+- MediaWiki
+
