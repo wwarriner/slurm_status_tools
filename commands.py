@@ -96,6 +96,27 @@ class QualityOfService:
 
         self._df = df_state
 
+    def merge_partitions(self, partitions: "Partitions") -> None:
+        AGG_FUNCTIONS = {PARTITION: ", ".join}
+        AGG_COLUMNS = list(AGG_FUNCTIONS.keys())
+        COLUMNS = [*AGG_COLUMNS, QOS]
+
+        partitions_df = partitions.to_df()
+        partitions_df = partitions_df[COLUMNS]
+
+        partitions_groupby = partitions_df.groupby(QOS, as_index=False)
+        partitions_grouped_df = partitions_groupby.agg(AGG_FUNCTIONS)
+
+        merged_df = self._df.merge(
+            partitions_grouped_df, how="left", left_on=QOS, right_on=QOS
+        )
+        merged_df = merged_df.drop(QOS, axis="columns")
+        keep = ~merged_df[PARTITION].isna()
+        merged_df = merged_df[keep]
+        other_columns = [x for x in merged_df.columns if x != PARTITION]
+        merged_df = merged_df[[PARTITION, *other_columns]]
+        self._df = merged_df
+
     def to_df(self):
         return self._df
 
