@@ -69,6 +69,7 @@ NODE_LIST = "Node List"
 QOS = "QoS Limits"
 MEMORY_GB_QOS = "Memory (GB) Quota"
 CORE_QOS = "Core Count Quota"
+GPU_QOS = "GPU Count Quota"
 
 
 MB_TO_GB = 1.0 / 1024.0
@@ -85,13 +86,18 @@ class QualityOfService:
         df_state["mem"] = df_state["mem"].apply(parse.parse_memory_value_to_gb)
         df_state = pd.concat([df_qos["Name"], df_state], axis="columns")
         df_state = df_state.rename(
-            columns={"Name": QOS, "cpu": CORE_QOS, "mem": MEMORY_GB_QOS}
+            columns={
+                "Name": QOS,
+                "cpu": CORE_QOS,
+                "mem": MEMORY_GB_QOS,
+                "gres/gpu": GPU_QOS,
+            }
         )
-        df_state[MEMORY_GB_QOS] = (
-            df_state[MEMORY_GB_QOS].replace(np.nan, 0.0).astype(int).replace(0, "")
-        )
-        df_state[CORE_QOS] = (
-            df_state[CORE_QOS].replace(np.nan, 0.0).astype(int).replace(0, "")
+
+        transform_cols = df_state.columns.to_list()
+        transform_cols.remove(QOS)
+        df_state[transform_cols] = df_state[transform_cols].apply(
+            self._transform_output_column
         )
 
         self._df = df_state
@@ -119,6 +125,10 @@ class QualityOfService:
 
     def to_df(self):
         return self._df
+
+    @staticmethod
+    def _transform_output_column(s: pd.Series) -> pd.Series:
+        return s.replace(np.nan, 0.0).astype(int).replace(0, "")
 
 
 class Partitions:
