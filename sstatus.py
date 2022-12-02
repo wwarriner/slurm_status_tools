@@ -61,7 +61,7 @@ def _build(command: str, summary: str, snapshot: parse.Snapshot) -> pd.DataFrame
         qos = commands.QualityOfService(snapshot=snapshot)
         partitions = commands.Partitions(snapshot=snapshot)
         qos.merge_partitions(partitions=partitions)
-        out = qos.to_df()
+        out = qos.to_df(empty_value="n/a")
     else:
         assert False
 
