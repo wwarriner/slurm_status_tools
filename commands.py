@@ -123,8 +123,10 @@ class QualityOfService:
         merged_df = merged_df[[PARTITION, *other_columns]]
         self._df = merged_df
 
-    def to_df(self):
-        return self._df
+    def to_df(self, empty_value: str = ""):
+        df = self._df.copy()
+        df = df.replace(to_replace="", value=empty_value)
+        return df
 
     @staticmethod
     def _transform_output_column(s: pd.Series) -> pd.Series:
