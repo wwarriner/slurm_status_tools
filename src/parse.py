@@ -1,180 +1,88 @@
 import itertools
-from typing import Dict, List
+from typing import Dict, List, Tuple
 
 DATA = Dict[str, str]
 
 
-def is_legacy_scontrol_show_job_output(_s: str) -> bool:
-    return 1 < _s.count("\n")
-
-
-def parse_key_value_lines(_s: str, delimiter: str, separator: str) -> List[DATA]:
-    lines = _s.split("\n")
-    data = [parse_key_value_line(line, delimiter, separator) for line in lines]
-    return data
-
-
-def parse_key_value_line(_s: str, delimiter: str, separator: str) -> DATA:
-    terms = _s.split(delimiter)
-
-    tokens = [term.split(separator, 1) for term in terms]
-    tokens = [(t[0], t[1]) for t in tokens]
-
-    keys, values = zip(*tokens)
-    keys = list(keys)
-    values = list(values)
-
-    data = _to_data(keys, values)
-
-    # TODO too opinionated?
-    data.pop("")
-    [data.pop(k) for k, v in data.items() if v == ""]
-
-    # TODO interpret values
-
-    return data
-
-
-def parse_delimited_table(_s: str, delimiter: str) -> List[DATA]:
+def parse_delimited(_s: str, delimiter: str) -> List[DATA]:
     """ """
+
     parts = _s.split("\n", 1)
+    header, body = parts[0], parts[1]
 
-    all_keys = itertools.cycle([parts[0].split("|")])
-    all_values = [p.split("|") for p in parts[1].split("\n")]
+    all_keys = [header.split("|")]
+    all_values = [p.split("|") for p in body.split("\n")]
 
-    data = [_to_data(keys, values) for keys, values in zip(all_keys, all_values)]
-
-    # TODO interpret values
+    data = [
+        _to_data(keys, values)
+        for keys, values in zip(itertools.cycle(all_keys), all_values)
+    ]
 
     return data
 
 
-def parse_scontrol(_s: str, delimiter: str) -> List[DATA]:
-    """
-    Parses output of scontrol -o *. The command returns one record per line
-    (node or job). Each line has quasi-flag-style args that look like the
-    following:
-    ```
-    a=foo b=bar c=hello world d=something=actual value
-    ```
-
-    The model is that each arg is composed of a field and a value as
-    <field>=<value>. Values have spaces, but the field-value pairs are space
-    separated and values can contain equals symbols, so we have to take care in
-    parsing.
-
-    The approach to parsing this involves parsing in reverse order. We loop over
-    the contents of a line, popping them from the back end and putting them in
-    both the field and value. When we hit an equals character, we reset the
-    field and change state (equals_hit=True). When we hit a space while
-    equals_hit=True, we assume we've just finished collecting the actual field,
-    so we turn the field and value into strings, remove the field and leading
-    `=` from the value string, and strip leading and trailing whitespace. Then
-    we add the results to a dict with field as key and value as value. We reset
-    state and continue parsing the line.
-
-    This method will not work for a value that has a space followed by an equals
-    sign. But then the problem becomes ill-posed because we can no longer
-    distinguish when a field-value pair ends, so we hope dearly that this never
-    happens. If it does we'll have to stop using the `-o` flag.
-
-    The input sep is used to create a delimited string when a field appears
-    multiple times. Notably this occurs for "Nodes" and "GRES_IDX" in `scontrol
-    -o show jobs`.
-    """
+def parse_scontrol(_s: str, join_duplicates_with: str = ",") -> List[DATA]:
     lines = _s.split("\n")
-
-    all_data: List[Dict[str, str]] = []
-    for line_s in lines:
-        line_data: Dict[str, List[str]] = {}
-        line: List[str] = list(line_s)
-        field: List[str] = []
-        value: List[str] = []
-        equals_hit = False
-        while line:
-            c: str = line.pop()
-            field.append(c)
-            value.append(c)
-            if c == "=":
-                field = []
-                equals_hit = True
-            if (c == " " or not line) and equals_hit:
-                field_s: str = "".join(field[::-1])
-                field_s = field_s.strip()
-
-                value_s: str = "".join(value[::-1])
-                value_s = value_s.replace(field_s, "", 1)
-                value_s = value_s.replace("=", "", 1)
-                value_s = value_s.strip()
-
-                if field_s in line_data:
-                    line_data[field_s].append(value_s)
-                else:
-                    line_data[field_s] = [value_s]
-
-                field = []
-                value = []
-                equals_hit = False
-
-        line_data.pop("", None)
-        line_df_data: Dict[str, str] = {k: sep.join(v) for k, v in line_data.items()}
-        all_data.append(line_df_data)
-        # TODO deal with the case where multiple nodes are requested. Will get multiple of some columns!
-
-    df = pd.DataFrame(all_data)
-    df = _fillna_extended(df=df)
-    return df
-
-
-def parse_scontrol_line(_s: str, delimiter: str, separator: str) -> DATA:
-    # - keys do not have spaces
-    # - values may have spaces
-    # - proceed through the line one character at a time in reverse order
-    # - accumulate popped characters in a token
-    # - if we hit an equals sign, the token must have been a value
-    # - if we hit a space (or ran out of characters) AND equals was hit
-    #   recently, the token must have been a key AND we now have a key-value
-    #   pair
-
-    line_s = _s
-
-    line_data: Dict[str, List[str]] = {}
-    characters: List[str] = list(line_s)
-    token_accumulator: List[str] = []
-    key: List[str] = []
-    value: List[str] = []
-    equals_hit = False
-    while characters:
-        c: str = characters.pop()
-        token_accumulator.append(c)
-
-        if c == "=":
-            value = token_accumulator
-            token_accumulator = []
-            equals_hit = True
-
-        if (c == " " or len(characters) == 0) and equals_hit:
-            key = token_accumulator
-            token_accumulator = []
-
-            key_s: str = "".join(reversed(key))
-            key_s = key_s.strip()
-
-            value_s: str = "".join(reversed(value))
-            value_s = value_s.strip()
-
-            if key_s in line_data:
-                line_data[key_s].append(value_s)
-            else:
-                line_data[key_s] = [value_s]
-
-            key = []
-            value = []
-            equals_hit = False
-
-    line_data.pop("", None)
-    out: Dict[str, str] = {k: delimiter.join(v) for k, v in line_data.items()}
+    out = [parse_scontrol_line(line, join_duplicates_with) for line in lines]
     return out
+
+
+def parse_scontrol_line(_s: str, join_duplicates_with: str = ",") -> DATA:
+    """
+    Transforms an scontrol line into a dataset.
+
+    Duplicate keys can appear for "Nodes" and "GRES_IDX" in `scontrol -o show
+    jobs`. There may be others. We join values of duplicated keys as follows:
+
+    `Nodes=c0001 ... Nodes=c0003` -> `{Nodes:[c0001,c0003]}`
+    """
+
+    tokens = tokenize_scontrol_line(_s)
+    keys = [token[0] for token in tokens]
+    data: Dict[str, List[str]] = {key: [] for key in keys}
+    [data[k].append(v) for k, v in tokens]
+    out = {k: join_duplicates_with.join(v) for k, v in data}
+    return out
+
+
+def tokenize_scontrol_line(_s: str) -> List[Tuple[str, str]]:
+    """
+    Tokenizes one line of output from scontrol -o *. Lines have quasi-flag-style
+    args that look like the following:
+
+    `a=foo b=bar c=hello world d=something=actual value`
+
+    Each token is composed of a field and a value as <field>=<value>. Values are
+    allowed to contain any characters but do not have a leading space. If values
+    were allowed to have leading spaces, tokenization would be impossible.
+
+    Tokenization starts with splitting on spaces. Parts are examined in reverse
+    order, accumulating parts that do not contain "=". When "=" is found in a
+    part, split on it. The first part is the key. The second part is a piece of
+    the value. All tokens encountered since the last "=", and the second piece
+    of the split, are joined by " " to form the value.
+    """
+
+    DELIMITER = " "
+    SEPARATOR = "="
+    parts = _s.split(DELIMITER)
+    value_accumulator: List[str] = []
+    result: List[Tuple[str, str]] = []
+    for part in reversed(parts):
+        if SEPARATOR not in part:
+            value_accumulator.append(part)
+            continue
+
+        key_rest = part.split(SEPARATOR, 1)
+        key, rest = key_rest[0], key_rest[1]
+
+        value_accumulator.append(rest)
+        value = DELIMITER.join(reversed(value_accumulator))
+
+        result.append((key, value))
+
+        value_accumulator = []
+    return result
 
 
 def _to_data(_keys: List[str], _values: List[str]) -> DATA:
