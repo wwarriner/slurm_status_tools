@@ -1,0 +1,6 @@
+name: slurm-wrappers
+channels:
+  - anaconda
+dependencies:
+  - python=3.7.16
+  - hypothesis=6.29.3
