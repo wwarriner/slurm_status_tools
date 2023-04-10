@@ -26,9 +26,9 @@ class TestTable(unittest.TestCase):
         self.assertEqual(t.height, 3)
         self.assertEqual(t.width, 4)
         self.assertEqual(t.size, 12)
-        self.assertEqual(t.columns, ["a", "b", "c", "d"])
+        self.assertEqual(t.columns, ["a", "d", "b", "c"])
         self.assertEqual(
-            t.values, [[1, NA, NA, 4.0], [2, "b", NA, NA], [NA, 3, "c", NA]]
+            t.values, [[1, 4.0, NA, NA], [2, NA, "b", NA], [NA, NA, 3, "c"]]
         )
 
     def test_subset_columns(self):
