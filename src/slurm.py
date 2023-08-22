@@ -1,15 +1,15 @@
 import datetime as dt
-from typing import Dict, List, Optional, Union
+from typing import Callable, Dict, List, Optional, Union
 
 from typing_extensions import Literal
 
-import command
-import parse
+import src.gather.command as command
+import src.gather.parse as parse
 
-DATA = Dict[str, str]
+ENTRY = Dict[str, str]
 
 
-# TODO sum up memory across allocations
+# TODO factor out the source so we can also pull from existing files
 
 
 class Sacct:
@@ -19,9 +19,8 @@ class Sacct:
 
     DELIMITER = "|"
 
-    def get_job_by_jobid(self, jobid: int) -> DATA:
+    def get_job_by_jobid(self, jobid: int) -> List[ENTRY]:
         assert 0 < jobid
-
         args = [
             "sacct",
             "--allocations",
@@ -31,11 +30,9 @@ class Sacct:
             "--jobs",
             f"{jobid}",
         ]
-        out = self._get_data(args)
-        data = out[0]
-        return data
+        return [self._pull(args)[0]]  # for older Slurm, only get sbatch main allocation
 
-    def get_jobs_by_user(self, user: str, start_date: dt.datetime) -> List[DATA]:
+    def get_jobs_by_user(self, user: str, start_date: dt.datetime) -> List[ENTRY]:
         args = [
             "sacct",
             "--allocations",
@@ -47,14 +44,10 @@ class Sacct:
             "--starttime",
             f"{start_date:%Y-%m-%dT%H%:%M:%S}",
         ]
-        out = self._get_data(args)
-        return out
+        return self._pull(args)
 
-    def _get_data(self, args: List[str]) -> List[DATA]:
-        result = command.run(args)
-        text = result.stdout
-        out = parse.parse_delimited(text, self.DELIMITER)
-        return out
+    def _pull(self, _args: List[str]) -> List[ENTRY]:
+        return _get_data(lambda s: parse.delimited_format(s, self.DELIMITER), _args)
 
 
 class Scontrol:
@@ -62,43 +55,45 @@ class Scontrol:
     https://slurm.schedmd.com/scontrol.html
     """
 
-    DELIMITER = " "
-    SEPARATOR = "="
-
-    def get_jobs(self, jobid: Optional[int] = None) -> List[DATA]:
-        args = self._build_args("jobs")
+    def get_jobs(self, jobid: Optional[int] = None) -> List[ENTRY]:
+        _id = ""
         if jobid is not None:
             assert 0 < jobid
-            args.append(f"{jobid}")
-        out = self._get_data(args)
-        return out
+            _id = str(jobid)
+        return self._get("jobs", _id)
 
-    def get_nodes(self, node: Optional[str] = None) -> List[DATA]:
-        args = self._build_args("nodes")
+    def get_nodes(self, node: Optional[str] = None) -> List[ENTRY]:
+        _id = ""
         if node is not None:
             assert node != ""
-            args.append(f"{node}")
-        out = self._get_data(args)
-        return out
+            _id = node
+        return self._get("nodes", _id)
 
-    def get_partitions(self, partition: Optional[str] = None) -> List[DATA]:
-        args = self._build_args("partitions")
+    def get_partitions(self, partition: Optional[str] = None) -> List[ENTRY]:
+        _id = ""
         if partition is not None:
             assert partition != ""
-            args.append(f"{partition}")
-        out = self._get_data(args)
-        return out
+            _id = partition
+        return self._get("partitions", _id)
 
-    def _build_args(
-        self, entity: Union[Literal["jobs"], Literal["nodes"], Literal["partitions"]]
-    ) -> List[str]:
-        return ["scontrol", "show", f"{entity}", "--all", "--details", "--oneliner"]
+    def _get(
+        self,
+        entity: Union[Literal["jobs"], Literal["nodes"], Literal["partitions"]],
+        entity_id: str,
+    ) -> List[ENTRY]:
+        args = [
+            "scontrol",
+            "show",
+            f"{entity}",
+            "--all",
+            "--details",
+            "--oneliner",
+            entity_id,
+        ]
+        return self._pull(args)
 
-    def _get_data(self, args: List[str]) -> List[DATA]:
-        result = command.run(args)
-        text = result.stdout
-        out = parse.parse_scontrol(text)
-        return out
+    def _pull(self, _args: List[str]) -> List[ENTRY]:
+        return _get_data(parse.scontrol_format, _args)
 
 
 class Squeue:
@@ -121,20 +116,20 @@ class Sacctmgr:
 
     DELIMITER = "|"
 
-    def get_qos(self) -> List[DATA]:
+    def get_qoses(self) -> List[ENTRY]:
         args = ["sacctmgr", "show", "qos", "--parsable2"]
-        result = command.run(args)
-        text = result.stdout
-        out = parse.parse_delimited(text, self.DELIMITER)
-        return out
+        return _get_data(lambda s: parse.delimited_format(s, self.DELIMITER), args)
+
+
+def _get_data(parse_fn: Callable[[str], List[ENTRY]], args: List[str]) -> List[ENTRY]:
+    result = command.run(args)
+    text = result.stdout
+    out = parse_fn(text)
+    return out
 
 
 # TODO REFACTOR
-def get_running_jobs(self) -> List[DATA]:
+def get_running_jobs(self) -> List[ENTRY]:
     data = self._get_scontrol_jobs()
     data = [d for d in data if d["state"] == "RUNNING"]
     return data
-
-
-def _was_running(self, _d: DATA) -> bool:
-    return _d["state"] == "RUNNING"

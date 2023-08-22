@@ -79,7 +79,7 @@ Terminated states: (DOWN,ERROR,FUTURE,UNKNOWN)
 User State Hierarchy
 - exist
     - active
-        - alloc(ated)
+        - running
         - pending
     - inactive
 
